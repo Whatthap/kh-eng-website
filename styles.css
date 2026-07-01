@@ -151,3 +151,19 @@ body.dark .bg-gray-50 {
   border-color: #818cf8;
   box-shadow: 0 6px 16px rgba(79, 70, 229, 0.08);
 }
+.account-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #f9fafb;
+}
+.account-card strong {
+  color: #111827;
+}
+body.dark .account-card {
+  background: #374151;
+  border-color: #4b5563;
+}
+body.dark .account-card strong {
+  color: #f9fafb;
+}

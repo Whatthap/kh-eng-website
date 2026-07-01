@@ -7,6 +7,15 @@ const searchResults = document.getElementById("search-results");
 const themeToggle = document.getElementById("theme-toggle");
 const backToTopButton = document.getElementById("back-to-top");
 const progressLabel = document.getElementById("lesson-progress-label");
+const accountBtn = document.getElementById("account-btn");
+const accountStatus = document.getElementById("account-status");
+const accountModal = document.getElementById("account-modal");
+const closeAccountModalBtn = document.getElementById("close-account-modal");
+const accountForm = document.getElementById("account-form");
+const accountNameInput = document.getElementById("account-name");
+const accountEmailInput = document.getElementById("account-email");
+const accountMessage = document.getElementById("account-message");
+const accountDashboard = document.getElementById("account-dashboard");
 const slideDayMap = [];
 const unlockNotice = document.createElement("div");
 unlockNotice.id = "unlock-notice";
@@ -15,6 +24,10 @@ unlockNotice.className =
 unlockNotice.textContent =
   "Complete the current lesson to unlock the next one.";
 document.body.appendChild(unlockNotice);
+const teacherAccountsKey = "teacher-accounts";
+const currentTeacherKey = "current-teacher";
+let teacherAccounts = [];
+let currentTeacher = null;
 
 function speak(text) {
   if ("speechSynthesis" in window) {
@@ -47,6 +60,221 @@ function updateProgressLabel() {
   const day = slideDayMap[currentSlide] || 1;
   progressLabel.textContent =
     day === 0 ? "Start lesson" : `Day ${day} in progress`;
+}
+
+function loadTeacherAccounts() {
+  try {
+    return JSON.parse(localStorage.getItem(teacherAccountsKey)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTeacherAccounts() {
+  localStorage.setItem(teacherAccountsKey, JSON.stringify(teacherAccounts));
+}
+
+function loadCurrentTeacher() {
+  try {
+    return JSON.parse(localStorage.getItem(currentTeacherKey)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function persistCurrentTeacher() {
+  if (currentTeacher) {
+    localStorage.setItem(currentTeacherKey, JSON.stringify(currentTeacher));
+  } else {
+    localStorage.removeItem(currentTeacherKey);
+  }
+}
+
+function normalizeEmail(email) {
+  return (email || "").trim().toLowerCase();
+}
+
+function saveTeacherProgress() {
+  if (!currentTeacher || !teacherAccounts.length) return;
+
+  const day = slideDayMap[currentSlide] || 0;
+  const existingProgress = currentTeacher.progress || {};
+  const completedDays = Array.isArray(existingProgress.completedDays)
+    ? existingProgress.completedDays
+    : [];
+  const nextCompletedDays =
+    day > 0 ? Array.from(new Set([...completedDays, day])) : completedDays;
+
+  currentTeacher = {
+    ...currentTeacher,
+    progress: {
+      ...existingProgress,
+      lastSlide: currentSlide,
+      completedDays: nextCompletedDays,
+      lastUpdated: new Date().toISOString(),
+    },
+  };
+
+  const index = teacherAccounts.findIndex(
+    (teacher) => teacher.id === currentTeacher.id,
+  );
+  if (index >= 0) {
+    teacherAccounts[index] = currentTeacher;
+    saveTeacherAccounts();
+    persistCurrentTeacher();
+    updateAccountUI();
+  }
+}
+
+function renderAccountDashboard() {
+  if (!accountDashboard) return;
+
+  if (!currentTeacher) {
+    accountDashboard.innerHTML = `
+      <div class="rounded-2xl bg-indigo-50 p-3 text-sm text-indigo-700">
+        No account is active yet. Save your email to create a teacher profile and keep your progress.
+      </div>
+    `;
+    return;
+  }
+
+  const completedDays = currentTeacher.progress?.completedDays || [];
+  const completedCount = completedDays.length;
+  const currentDay = completedDays.length ? Math.max(...completedDays) : 1;
+  const progressPercent = totalSlides
+    ? Math.round(((currentSlide + 1) / totalSlides) * 100)
+    : 0;
+
+  accountDashboard.innerHTML = `
+    <div class="space-y-3">
+      <div class="rounded-2xl bg-indigo-50 p-3">
+        <p class="text-sm font-semibold text-indigo-700">${currentTeacher.name}</p>
+        <p class="text-xs text-indigo-600">${currentTeacher.email}</p>
+        <div class="mt-2 h-2 overflow-hidden rounded-full bg-white/70">
+          <div class="h-full rounded-full bg-indigo-600" style="width: ${progressPercent}%"></div>
+        </div>
+        <p class="mt-2 text-xs text-indigo-700">Current progress: ${progressPercent}% • ${completedCount} day(s) completed</p>
+      </div>
+      <div class="rounded-2xl border border-gray-200 p-3">
+        <p class="text-sm font-semibold text-gray-800">Completed days</p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          ${
+            completedDays.length
+              ? completedDays
+                  .sort((a, b) => a - b)
+                  .map(
+                    (day) =>
+                      `<span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">Day ${day}</span>`,
+                  )
+                  .join("")
+              : '<span class="text-sm text-gray-500">No days completed yet.</span>'
+          }
+        </div>
+      </div>
+      <div class="rounded-2xl border border-gray-200 p-3">
+        <p class="text-sm font-semibold text-gray-800">Saved teachers</p>
+        <div class="mt-2 space-y-2">
+          ${teacherAccounts.map((teacher) => `<div class="account-card"><strong>${teacher.name}</strong><div class="mt-1 text-xs text-gray-500">${teacher.email}</div><div class="mt-1 text-xs text-indigo-600">${(teacher.progress?.completedDays || []).length} day(s) • Last day ${teacher.progress?.completedDays?.length ? Math.max(...teacher.progress.completedDays) : 0}</div></div>`).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function updateAccountUI() {
+  if (accountStatus) {
+    accountStatus.textContent = currentTeacher
+      ? currentTeacher.name.split(" ")[0]
+      : "Guest";
+  }
+  if (accountBtn) {
+    accountBtn.textContent = currentTeacher ? "My Account" : "Teacher Account";
+  }
+  renderAccountDashboard();
+}
+
+function openAccountModal() {
+  if (accountModal) {
+    accountModal.classList.remove("hidden");
+    accountModal.classList.add("flex");
+    updateAccountUI();
+  }
+}
+
+function closeAccountModal() {
+  if (accountModal) {
+    accountModal.classList.add("hidden");
+    accountModal.classList.remove("flex");
+  }
+}
+
+function handleAccountSubmit(event) {
+  event.preventDefault();
+  const name = (accountNameInput?.value || "").trim();
+  const email = normalizeEmail(accountEmailInput?.value || "");
+
+  if (!email) {
+    if (accountMessage) {
+      accountMessage.textContent = "Please enter a valid email address.";
+    }
+    return;
+  }
+
+  const existingTeacher = teacherAccounts.find(
+    (teacher) => teacher.email === email,
+  );
+
+  if (existingTeacher) {
+    existingTeacher.name = name || existingTeacher.name;
+    currentTeacher = existingTeacher;
+    if (accountMessage) {
+      accountMessage.textContent = `Welcome back, ${currentTeacher.name}!`;
+    }
+  } else {
+    currentTeacher = {
+      id: window.crypto?.randomUUID?.() || `teacher-${Date.now()}`,
+      name: name || email.split("@")[0],
+      email,
+      createdAt: new Date().toISOString(),
+      progress: {
+        lastSlide: 0,
+        completedDays: [],
+      },
+    };
+    teacherAccounts.push(currentTeacher);
+    if (accountMessage) {
+      accountMessage.textContent = `Account created for ${currentTeacher.name}.`;
+    }
+  }
+
+  saveTeacherAccounts();
+  persistCurrentTeacher();
+  updateAccountUI();
+  if (accountNameInput) accountNameInput.value = currentTeacher.name;
+  if (accountEmailInput) accountEmailInput.value = currentTeacher.email;
+}
+
+function initializeAccountSystem() {
+  teacherAccounts = loadTeacherAccounts();
+  currentTeacher = loadCurrentTeacher();
+  updateAccountUI();
+
+  if (accountBtn) {
+    accountBtn.addEventListener("click", openAccountModal);
+  }
+  if (closeAccountModalBtn) {
+    closeAccountModalBtn.addEventListener("click", closeAccountModal);
+  }
+  if (accountModal) {
+    accountModal.addEventListener("click", (event) => {
+      if (event.target === accountModal) {
+        closeAccountModal();
+      }
+    });
+  }
+  if (accountForm) {
+    accountForm.addEventListener("submit", handleAccountSubmit);
+  }
 }
 
 function buildSlides() {
@@ -126,6 +354,7 @@ function goToSlide(idx) {
   currentSlide = targetIndex;
   unlockedSlide = Math.max(unlockedSlide, currentSlide);
   allSlides[currentSlide].classList.add("active");
+  saveTeacherProgress();
   updateUI();
   lucide.createIcons();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -229,4 +458,5 @@ if (searchInput) {
   );
 }
 
+initializeAccountSystem();
 buildSlides();
