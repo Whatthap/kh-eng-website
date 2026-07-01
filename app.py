@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
@@ -22,7 +22,7 @@ class Teacher(db.Model):
     role = db.Column(db.String(20), default="teacher")
 
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = generate_password_hash(password, method="pbkdf2:sha256")
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -37,9 +37,33 @@ def is_owner_email(email: str) -> bool:
 
 @app.route("/")
 def index():
-    if "teacher_id" in session:
+    if "teacher_id" not in session:
+        return render_template("login.html")
+
+    teacher = Teacher.query.get(session["teacher_id"])
+    if not teacher:
+        session.pop("teacher_id", None)
+        return render_template("login.html")
+
+    if is_owner_email(teacher.email) or teacher.role == "admin":
         return redirect(url_for("dashboard"))
-    return render_template("login.html")
+    return redirect(url_for("study"))
+
+
+@app.route("/study")
+def study():
+    if "teacher_id" not in session:
+        return redirect(url_for("login"))
+
+    teacher = Teacher.query.get(session["teacher_id"])
+    if not teacher:
+        session.pop("teacher_id", None)
+        return redirect(url_for("login"))
+
+    if is_owner_email(teacher.email) or teacher.role == "admin":
+        return redirect(url_for("dashboard"))
+
+    return send_from_directory(app.root_path, "index.html")
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -60,7 +84,9 @@ def register():
         db.session.add(teacher)
         db.session.commit()
         session["teacher_id"] = teacher.id
-        return redirect(url_for("dashboard"))
+        if is_owner_email(email) or role == "admin":
+            return redirect(url_for("dashboard"))
+        return redirect(url_for("study"))
 
     return render_template("register.html")
 
@@ -76,7 +102,9 @@ def login():
                 teacher.role = "admin"
                 db.session.commit()
             session["teacher_id"] = teacher.id
-            return redirect(url_for("dashboard"))
+            if is_owner_email(email) or teacher.role == "admin":
+                return redirect(url_for("dashboard"))
+            return redirect(url_for("study"))
 
         return render_template("login.html", error="Invalid email or password")
 
@@ -97,7 +125,7 @@ def dashboard():
         return redirect(url_for("logout"))
 
     if teacher.role != "admin" and not is_owner_email(teacher.email):
-        return render_template("dashboard.html", teacher=teacher, teachers=[teacher])
+        return redirect(url_for("study"))
 
     teachers = Teacher.query.order_by(Teacher.created_at.desc()).all()
     return render_template("dashboard.html", teacher=teacher, teachers=teachers)
