@@ -39,7 +39,7 @@ def is_owner_email(email: str) -> bool:
 def index():
     if "teacher_id" in session:
         return redirect(url_for("dashboard"))
-    return redirect(url_for("login"))
+    return render_template("login.html")
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
