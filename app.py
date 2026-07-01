@@ -8,6 +8,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///teachers.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["OWNER_EMAIL"] = os.environ.get("OWNER_EMAIL", "whatthap@gmail.com").strip().lower()
 
 db = SQLAlchemy(app)
 
@@ -29,12 +30,16 @@ class Teacher(db.Model):
 with app.app_context():
     db.create_all()
 
+
+def is_owner_email(email: str) -> bool:
+    return bool(app.config["OWNER_EMAIL"]) and email == app.config["OWNER_EMAIL"]
+
+
 @app.route("/")
 def index():
     if "teacher_id" in session:
-        teacher = Teacher.query.get(session["teacher_id"])
-        return render_template("index.html", teacher=teacher)
-    return render_template("index.html")
+        return redirect(url_for("dashboard"))
+    return redirect(url_for("login"))
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -49,7 +54,8 @@ def register():
         if Teacher.query.filter_by(email=email).first():
             return render_template("register.html", error="Email already exists")
 
-        teacher = Teacher(name=name, email=email)
+        role = "admin" if is_owner_email(email) or Teacher.query.count() == 0 else "teacher"
+        teacher = Teacher(name=name, email=email, role=role)
         teacher.set_password(password)
         db.session.add(teacher)
         db.session.commit()
@@ -66,6 +72,9 @@ def login():
         teacher = Teacher.query.filter_by(email=email).first()
 
         if teacher and teacher.check_password(password):
+            if is_owner_email(email) or not Teacher.query.filter_by(role="admin").first():
+                teacher.role = "admin"
+                db.session.commit()
             session["teacher_id"] = teacher.id
             return redirect(url_for("dashboard"))
 
@@ -87,7 +96,7 @@ def dashboard():
     if not teacher:
         return redirect(url_for("logout"))
 
-    if teacher.role != "admin":
+    if teacher.role != "admin" and not is_owner_email(teacher.email):
         return render_template("dashboard.html", teacher=teacher, teachers=[teacher])
 
     teachers = Teacher.query.order_by(Teacher.created_at.desc()).all()
