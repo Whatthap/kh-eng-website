@@ -1,0 +1,123 @@
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+import os
+
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///teachers.db")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(app)
+
+class Teacher(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    progress = db.Column(db.Text, default="{}")
+    role = db.Column(db.String(20), default="teacher")
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+with app.app_context():
+    db.create_all()
+
+@app.route("/")
+def index():
+    if "teacher_id" in session:
+        teacher = Teacher.query.get(session["teacher_id"])
+        return render_template("index.html", teacher=teacher)
+    return render_template("index.html")
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        if not name or not email or not password:
+            return render_template("register.html", error="Please fill in all fields")
+
+        if Teacher.query.filter_by(email=email).first():
+            return render_template("register.html", error="Email already exists")
+
+        teacher = Teacher(name=name, email=email)
+        teacher.set_password(password)
+        db.session.add(teacher)
+        db.session.commit()
+        session["teacher_id"] = teacher.id
+        return redirect(url_for("dashboard"))
+
+    return render_template("register.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        teacher = Teacher.query.filter_by(email=email).first()
+
+        if teacher and teacher.check_password(password):
+            session["teacher_id"] = teacher.id
+            return redirect(url_for("dashboard"))
+
+        return render_template("login.html", error="Invalid email or password")
+
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.pop("teacher_id", None)
+    return redirect(url_for("index"))
+
+@app.route("/dashboard")
+def dashboard():
+    if "teacher_id" not in session:
+        return redirect(url_for("login"))
+
+    teacher = Teacher.query.get(session["teacher_id"])
+    if not teacher:
+        return redirect(url_for("logout"))
+
+    if teacher.role != "admin":
+        return render_template("dashboard.html", teacher=teacher, teachers=[teacher])
+
+    teachers = Teacher.query.order_by(Teacher.created_at.desc()).all()
+    return render_template("dashboard.html", teacher=teacher, teachers=teachers)
+
+@app.route("/api/progress", methods=["POST"])
+def save_progress():
+    if "teacher_id" not in session:
+        return jsonify({"success": False, "message": "Please log in first"}), 401
+
+    teacher = Teacher.query.get(session["teacher_id"])
+    if not teacher:
+        return jsonify({"success": False, "message": "Teacher not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    teacher.progress = str(data)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Progress saved"})
+
+@app.route("/api/progress")
+def get_progress():
+    if "teacher_id" not in session:
+        return jsonify({"success": False, "message": "Please log in first"}), 401
+
+    teacher = Teacher.query.get(session["teacher_id"])
+    if not teacher:
+        return jsonify({"success": False, "message": "Teacher not found"}), 404
+
+    return jsonify({"success": True, "progress": teacher.progress})
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=8000)

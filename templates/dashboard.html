@@ -1,0 +1,46 @@
+{% extends 'base.html' %} {% block content %}
+<div class="space-y-6">
+  <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <p class="text-sm font-semibold text-indigo-600">Welcome back</p>
+    <h1 class="mt-1 text-2xl font-semibold text-slate-900">
+      {{ teacher.name }}
+    </h1>
+    <p class="mt-2 text-sm text-slate-600">{{ teacher.email }}</p>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-semibold text-slate-900">Your progress</h2>
+      <div class="mt-4 space-y-3">
+        {% set progress = teacher.progress | string %}
+        <div class="rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
+          {{ progress }}
+        </div>
+      </div>
+    </div>
+
+    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-semibold text-slate-900">All teachers</h2>
+      <div class="mt-4 space-y-3">
+        {% for t in teachers %}
+        <div class="rounded-2xl border border-slate-200 p-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="font-semibold text-slate-900">{{ t.name }}</p>
+              <p class="text-sm text-slate-500">{{ t.email }}</p>
+            </div>
+            <span
+              class="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700"
+              >{{ t.role }}</span
+            >
+          </div>
+          <p class="mt-2 text-sm text-slate-600">
+            Progress data: {{ t.progress }}
+          </p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
