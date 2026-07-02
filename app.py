@@ -4,9 +4,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import os
 
+os.makedirs("instance", exist_ok=True)
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///instance/teachers.db")
+db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "instance", "teachers.db"))
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{db_path}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["OWNER_EMAIL"] = os.environ.get("OWNER_EMAIL", "whatthap@gmail.com").strip().lower()
 
@@ -140,9 +143,13 @@ def save_progress():
         return jsonify({"success": False, "message": "Teacher not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    teacher.progress = str(data)
-    db.session.commit()
-    return jsonify({"success": True, "message": "Progress saved"})
+    import json
+    try:
+        teacher.progress = json.dumps(data)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Progress saved"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/progress")
 def get_progress():
