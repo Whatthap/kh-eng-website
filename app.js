@@ -124,6 +124,15 @@ function saveTeacherProgress() {
     persistCurrentTeacher();
     updateAccountUI();
   }
+
+  if (window.location.pathname.startsWith("/study")) {
+    fetch("/api/sync-progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(currentTeacher.progress),
+    }).catch(() => {});
+  }
 }
 
 function renderAccountDashboard() {

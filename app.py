@@ -156,5 +156,26 @@ def get_progress():
     return jsonify({"success": True, "progress": teacher.progress})
 
 
+@app.route("/api/sync-progress", methods=["POST"])
+def sync_progress():
+    if "teacher_id" not in session:
+        return jsonify({"success": False, "message": "Please log in first"}), 401
+
+    teacher = Teacher.query.get(session["teacher_id"])
+    if not teacher:
+        return jsonify({"success": False, "message": "Teacher not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "completedDays" in data or "lastSlide" in data:
+        import json
+        try:
+            teacher.progress = json.dumps(data)
+            db.session.commit()
+            return jsonify({"success": True, "message": "Progress synced"})
+        except Exception as e:
+            return jsonify({"success": False, "message": str(e)}), 500
+    return jsonify({"success": False, "message": "No data to sync"}), 400
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8000)
