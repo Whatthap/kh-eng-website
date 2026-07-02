@@ -177,5 +177,10 @@ def sync_progress():
     return jsonify({"success": False, "message": "No data to sync"}), 400
 
 
+@app.route("/favicon.ico")
+def favicon():
+    return "", 204
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8000)
